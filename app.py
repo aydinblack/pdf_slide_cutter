@@ -291,7 +291,7 @@ with col2:
 
         # İşle butonu - tam genişlik
         if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
-            with st.spinner("📄 PDF işleniyor..."):
+            try:
                 pdf_bytes = uploaded.getvalue()
                 pages = pdf_to_images(pdf_bytes, dpi=DPI)
 
@@ -326,8 +326,16 @@ with col2:
                 st.session_state.pptx_created = False
                 st.session_state.pptx_buffer = None
 
-            st.success(f"✅ İşlem tamamlandı! {len(crops_pngs)} slide oluşturuldu.")
-            st.rerun()
+                # Progress bar ve status'u temizle
+                progress_bar.empty()
+                status_text.empty()
+
+                st.success(f"✅ İşlem tamamlandı! {len(crops_pngs)} slide oluşturuldu.")
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"❌ Hata oluştu: {str(e)}")
+                st.error("Lütfen PDF dosyanızı kontrol edin ve tekrar deneyin.")
 
 st.markdown("---")
 
