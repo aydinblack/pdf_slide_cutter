@@ -211,19 +211,46 @@ st.set_page_config(
 )
 
 
-# Kalıcı durum
+# Kalıcı durum - Güvenli başlatma
 def _ensure_state():
     ss = st.session_state
-    ss.setdefault("crops_pngs", [])
-    ss.setdefault("last_count", 0)
-    ss.setdefault("processed", False)
-    ss.setdefault("pptx_created", False)
-    ss.setdefault("pptx_buffer", None)
-    ss.setdefault("show_preview", False)
-    ss.setdefault("last_uploaded_file_id", None)  # Yüklenen dosyayı takip için
+    # Tüm state'leri güvenli şekilde başlat
+    if "crops_pngs" not in ss:
+        ss.crops_pngs = []
+    if "last_count" not in ss:
+        ss.last_count = 0
+    if "processed" not in ss:
+        ss.processed = False
+    if "pptx_created" not in ss:
+        ss.pptx_created = False
+    if "pptx_buffer" not in ss:
+        ss.pptx_buffer = None
+    if "show_preview" not in ss:
+        ss.show_preview = False
+    if "last_uploaded_file_id" not in ss:
+        ss.last_uploaded_file_id = None
+    if "pages_count" not in ss:
+        ss.pages_count = 0
+    if "bands_count" not in ss:
+        ss.bands_count = 0
 
 
 _ensure_state()
+
+
+# Güvenli state temizleme fonksiyonu
+def clear_all_state():
+    """Tüm session state'leri güvenli şekilde temizler"""
+    keys_to_clear = [
+        "crops_pngs", "last_count", "processed", "pptx_created",
+        "pptx_buffer", "show_preview", "last_uploaded_file_id",
+        "pages_count", "bands_count"
+    ]
+    for key in keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
+    _ensure_state()  # Yeniden başlat
+
 
 # ---- Modern CSS Stilleri ----
 st.markdown(
@@ -276,12 +303,7 @@ with col2:
 
         # Eğer farklı bir dosya yüklendiyse, önceki verileri temizle
         if st.session_state.last_uploaded_file_id != current_file_id:
-            st.session_state.crops_pngs = []
-            st.session_state.last_count = 0
-            st.session_state.processed = False
-            st.session_state.pptx_created = False
-            st.session_state.pptx_buffer = None
-            st.session_state.show_preview = False
+            clear_all_state()  # Güvenli temizleme
             st.session_state.last_uploaded_file_id = current_file_id
 
         file_size = len(uploaded.getvalue()) / (1024 * 1024)
@@ -431,11 +453,7 @@ if st.session_state.processed and st.session_state.crops_pngs:
             st.info("ℹ️ Yeni bir PDF yüklediğinizde veya sekmeyi kapattığınızda önizleme otomatik silinir", icon="ℹ️")
         with col_info2:
             if st.button("🗑️ Önizlemeyi Temizle", key="clear_preview_btn"):
-                st.session_state.crops_pngs = []
-                st.session_state.processed = False
-                st.session_state.pptx_created = False
-                st.session_state.pptx_buffer = None
-                st.session_state.show_preview = False
+                clear_all_state()  # Güvenli temizleme
                 st.rerun()
 
         st.caption("💡 Görsellerin üzerine gelerek büyütebilirsiniz")
