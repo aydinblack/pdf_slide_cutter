@@ -291,54 +291,42 @@ with col2:
 
         # İşle butonu - tam genişlik
         if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
-            pdf_bytes = uploaded.getvalue()
+            with st.spinner("📄 PDF işleniyor..."):
+                pdf_bytes = uploaded.getvalue()
+                pages = pdf_to_images(pdf_bytes, dpi=DPI)
 
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+                crops_pngs = []
+                total_bands = 0
 
-            status_text.text("📄 PDF rasterize ediliyor...")
-            progress_bar.progress(20)
-            pages = pdf_to_images(pdf_bytes, dpi=DPI)
+                progress_bar = st.progress(0)
+                status_text = st.empty()
 
-            crops_pngs = []
-            total_bands = 0
+                for idx, img in enumerate(pages):
+                    status_text.text(f"🔍 Sayfa {idx + 1}/{len(pages)} işleniyor...")
+                    bands, _ = find_header_bands(img)
+                    total_bands += len(bands)
+                    boxes = slice_by_headers(img, bands)
+                    for box in boxes:
+                        x0, y0, x1, y1 = box
+                        crop = img[y0:y1, x0:x1]
+                        pil_im = bgr_to_pil(crop)
+                        b = io.BytesIO()
+                        pil_im.save(b, format="PNG")
+                        crops_pngs.append(b.getvalue())
 
-            status_text.text("🔍 Başlık tespiti ve kırpma yapılıyor...")
-            progress_bar.progress(40)
+                    progress_bar.progress((idx + 1) / len(pages))
 
-            for idx, img in enumerate(pages):
-                bands, _ = find_header_bands(img)
-                total_bands += len(bands)
-                boxes = slice_by_headers(img, bands)
-                for box in boxes:
-                    x0, y0, x1, y1 = box
-                    crop = img[y0:y1, x0:x1]
-                    pil_im = bgr_to_pil(crop)
-                    b = io.BytesIO()
-                    pil_im.save(b, format="PNG")
-                    crops_pngs.append(b.getvalue())
+                # Duruma kaydet
+                st.session_state.crops_pngs = crops_pngs
+                st.session_state.last_count = len(crops_pngs)
+                st.session_state.processed = True
+                st.session_state.pages_count = len(pages)
+                st.session_state.bands_count = total_bands
+                st.session_state.show_preview = True
+                st.session_state.pptx_created = False
+                st.session_state.pptx_buffer = None
 
-                progress_bar.progress(40 + int(50 * (idx + 1) / len(pages)))
-
-            status_text.text("✨ Tamamlanıyor...")
-            progress_bar.progress(100)
-
-            time.sleep(0.3)  # Kısa bekleme
-
-            # Duruma kaydet
-            st.session_state.crops_pngs = crops_pngs
-            st.session_state.last_count = len(crops_pngs)
-            st.session_state.processed = True
-            st.session_state.pages_count = len(pages)
-            st.session_state.bands_count = total_bands
-            st.session_state.show_preview = True
-            st.session_state.pptx_created = False
-            st.session_state.pptx_buffer = None
-
-            # Progress bar ve status'u tamamen temizle
-            status_text.empty()
-            progress_bar.empty()
-
+            st.success(f"✅ İşlem tamamlandı! {len(crops_pngs)} slide oluşturuldu.")
             st.rerun()
 
 st.markdown("---")
@@ -457,7 +445,7 @@ if st.session_state.processed and st.session_state.crops_pngs:
                         if im.mode != 'RGB':
                             im = im.convert('RGB')
                         # Streamlit'e göster
-                        cols[j].image(im, caption=f"Slide {idx + 1:04d}", use_column_width=True)
+                        cols[j].image(im, caption=f"Slide {idx + 1:04d}")
                     except Exception as e:
                         cols[j].error(f"❌ Görsel yüklenemedi: {str(e)}")
 
