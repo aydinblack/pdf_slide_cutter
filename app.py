@@ -262,6 +262,10 @@ with col2:
         # İşle butonu - tam genişlik
         if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
             try:
+                # İşlem durumunu session state'e kaydet
+                st.session_state.processing = True
+                st.session_state.results = None
+
                 with st.spinner("📄 PDF işleniyor..."):
                     pdf_bytes = uploaded.getvalue()
                     pages = pdf_to_images(pdf_bytes, dpi=DPI)
@@ -287,10 +291,26 @@ with col2:
 
                         progress_bar.progress((idx + 1) / len(pages))
 
-                    # Sonuçları göster
-                    st.success(f"✅ İşlem tamamlandı! {len(crops_pngs)} slide oluşturuldu.")
+                    # Progress bar ve status'u temizle
+                    progress_bar.empty()
+                    status_text.empty()
 
-                    # İstatistikler
+                    # Sonuçları session state'e kaydet
+                    st.session_state.results = {
+                        'crops_pngs': crops_pngs,
+                        'pages_count': len(pages),
+                        'bands_count': total_bands,
+                        'last_count': len(crops_pngs),
+                        'pptx_buffer': create_powerpoint(crops_pngs)
+                    }
+                    st.session_state.processing = False
+
+                    # Başarı mesajı
+                    st.success(f"✅ İşlem tamamlandı! {len(crops_pngs)} slide oluşturuldu.")
+                    st.info("📥 İndirme butonları aktif - ZIP ve PowerPoint'i indirebilirsiniz!")
+
+                    # İstatistikler ve indirme butonları
+                    # Sonuçları göster
                     st.markdown("### 📊 İşlem Sonuçları")
                     col1, col2, col3, col4 = st.columns(4)
 
@@ -345,20 +365,17 @@ with col2:
 
                     st.markdown("<br>", unsafe_allow_html=True)
 
-                    # PowerPoint oluşturma
+                    # PowerPoint indirme
                     col_ppt1, col_ppt2, col_ppt3 = st.columns([1, 2, 1])
                     with col_ppt2:
-                        if st.button("🎯 PowerPoint Oluştur", type="secondary", key="create_ppt_btn"):
-                            with st.spinner("📊 PowerPoint sunumu oluşturuluyor..."):
-                                pptx_buffer = create_powerpoint(crops_pngs)
-                                st.download_button(
-                                    label="📥 PowerPoint'i İndir (.pptx)",
-                                    data=pptx_buffer,
-                                    file_name="sunum.pptx",
-                                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                                    type="primary",
-                                    key="download_ppt_btn"
-                                )
+                        st.download_button(
+                            label="📥 PowerPoint'i İndir (.pptx)",
+                            data=st.session_state.results['pptx_buffer'],
+                            file_name="sunum.pptx",
+                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            type="primary",
+                            key="download_ppt_btn"
+                        )
 
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.markdown("---")
@@ -385,6 +402,41 @@ with col2:
             except Exception as e:
                 st.error(f"❌ Hata oluştu: {str(e)}")
                 st.error("Lütfen PDF dosyanızı kontrol edin ve tekrar deneyin.")
+
+# ---- Kalıcı İndirme Butonları (Session boyunca) ----
+if hasattr(st.session_state, 'results') and st.session_state.results and not getattr(st.session_state, 'processing',
+                                                                                     False):
+    st.markdown("---")
+    st.markdown("### 📥 İndirme Butonları")
+    st.info("💾 Bu butonlar session boyunca aktif kalır - istediğiniz zaman indirebilirsiniz")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        # ZIP indirme
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for i, data in enumerate(st.session_state.results['crops_pngs'], start=1):
+                zf.writestr(f"slide_{i:04d}.png", data)
+        zip_buf.seek(0)
+
+        st.download_button(
+            label=f"📦 ZIP İndir ({st.session_state.results['last_count']} görsel)",
+            data=zip_buf,
+            file_name="slides.zip",
+            mime="application/zip",
+            key="persistent_zip_btn"
+        )
+
+    with col2:
+        # PowerPoint indirme
+        st.download_button(
+            label="📥 PowerPoint İndir (.pptx)",
+            data=st.session_state.results['pptx_buffer'],
+            file_name="sunum.pptx",
+            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            type="primary",
+            key="persistent_ppt_btn"
+        )
 
 st.markdown("---")
 
