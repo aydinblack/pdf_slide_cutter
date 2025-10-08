@@ -376,7 +376,7 @@ if st.session_state.show_results and st.session_state.crops:
                     img = Image.open(io.BytesIO(st.session_state.crops[idx]))
                     if img.mode != 'RGB':
                         img = img.convert('RGB')
-                    cols[j].image(img, caption=f"Slide {idx + 1:04d}", use_column_width=True)
+                    cols[j].image(img, caption=f"Slide {idx + 1:04d}")
                 except:
                     cols[j].error("❌")
 
