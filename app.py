@@ -9,27 +9,39 @@ from pptx import Presentation
 from pptx.util import Inches
 
 # ========================= Sabit Ayarlar =========================
-DPI = 240
+DPI = 150  # 240'tan 150'ye düşürüldü (bellek tasarrufu)
 ROW_RATIO_THRESH = 0.45
 CNT_MIN_W_RATIO = 0.65
 MIN_BAND_H = 32
 MAX_BAND_H_FRAC = 1 / 10
 PAD_TOP = 6
 PAD_BOTTOM = 12
+MAX_FILE_SIZE_MB = 100  # Maksimum dosya boyutu
 
 
 # ========================= Yardımcı Fonksiyonlar =========================
 
 def pdf_to_images(file_bytes: bytes, dpi: int = DPI):
+    """PDF'i sayfa sayfa işler (bellek optimizasyonu)"""
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     imgs = []
     zoom = dpi / 72.0
     mat = fitz.Matrix(zoom, zoom)
+
     for page in doc:
-        pix = page.get_pixmap(matrix=mat, alpha=False)
-        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        imgs.append(img)
+        try:
+            # Tek sayfa işle
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            imgs.append(img)
+
+            # Pixmap'i hemen temizle
+            pix = None
+        except Exception as e:
+            st.warning(f"⚠️ Sayfa {page.number + 1} atlandı: {str(e)}")
+            continue
+
     doc.close()
     return imgs
 
@@ -247,54 +259,80 @@ with col2:
 
     if uploaded:
         file_size = len(uploaded.getvalue()) / (1024 * 1024)
-        st.success(f"✅ **{uploaded.name}** ({file_size:.1f} MB)")
 
-        if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
-            try:
-                with st.spinner("📄 PDF işleniyor..."):
-                    pdf_bytes = uploaded.getvalue()
-                    pages = pdf_to_images(pdf_bytes, dpi=DPI)
+        # Dosya boyutu kontrolü
+        if file_size > MAX_FILE_SIZE_MB:
+            st.error(f"❌ Dosya çok büyük! Maksimum {MAX_FILE_SIZE_MB}MB yüklenebilir. (Dosyanız: {file_size:.1f}MB)")
+            st.info("💡 İpucu: PDF'nizi daha küçük parçalara bölerek yükleyebilirsiniz.")
+        else:
+            st.success(f"✅ **{uploaded.name}** ({file_size:.1f} MB)")
 
-                    crops_list = []
-                    total_bands = 0
+            if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
+                try:
+                    with st.spinner("📄 PDF işleniyor..."):
+                        pdf_bytes = uploaded.getvalue()
 
-                    progress = st.progress(0)
+                        # Bellek yönetimi için küçük parçalar halinde işle
+                        pages = pdf_to_images(pdf_bytes, dpi=DPI)
 
-                    for idx, img in enumerate(pages):
-                        try:
-                            bands = find_header_bands(img)
-                            total_bands += len(bands)
-                            boxes = slice_by_headers(img, bands)
+                        if not pages:
+                            st.error("❌ PDF sayfaları okunamadı.")
+                            st.stop()
 
-                            for box in boxes:
-                                x0, y0, x1, y1 = box
-                                crop = img[y0:y1, x0:x1]
-                                pil_im = bgr_to_pil(crop)
-                                buf = io.BytesIO()
-                                pil_im.save(buf, format="PNG")
-                                crops_list.append(buf.getvalue())
-                        except:
-                            pass
+                        st.info(f"📊 {len(pages)} sayfa bulundu, kırpılıyor...")
 
-                        progress.progress((idx + 1) / len(pages))
+                        crops_list = []
+                        total_bands = 0
 
-                    progress.empty()
+                        progress = st.progress(0)
 
-                    # Session state'e kaydet
-                    st.session_state.crops = crops_list
-                    st.session_state.stats = {
-                        "pages": len(pages),
-                        "bands": total_bands,
-                        "total": len(crops_list)
-                    }
-                    st.session_state.show_results = True
-                    st.session_state.pptx_data = None
+                        for idx, img in enumerate(pages):
+                            try:
+                                bands = find_header_bands(img)
+                                total_bands += len(bands)
+                                boxes = slice_by_headers(img, bands)
 
-                st.success(f"✅ {len(crops_list)} slide oluşturuldu!")
-                st.rerun()
+                                for box in boxes:
+                                    x0, y0, x1, y1 = box
+                                    crop = img[y0:y1, x0:x1]
+                                    pil_im = bgr_to_pil(crop)
 
-            except Exception as e:
-                st.error(f"❌ Hata: {str(e)}")
+                                    # PNG olarak sıkıştır
+                                    buf = io.BytesIO()
+                                    pil_im.save(buf, format="PNG", optimize=True)
+                                    crops_list.append(buf.getvalue())
+
+                                # Görüntüyü bellekten temizle
+                                img = None
+                            except Exception as e:
+                                st.warning(f"⚠️ Sayfa {idx + 1} kırpılamadı: {str(e)}")
+
+                            progress.progress((idx + 1) / len(pages))
+
+                        progress.empty()
+
+                        if not crops_list:
+                            st.error("❌ Hiç slide oluşturulamadı. PDF'de kırmızı başlık şeritleri bulunamadı.")
+                            st.stop()
+
+                        # Session state'e kaydet
+                        st.session_state.crops = crops_list
+                        st.session_state.stats = {
+                            "pages": len(pages),
+                            "bands": total_bands,
+                            "total": len(crops_list)
+                        }
+                        st.session_state.show_results = True
+                        st.session_state.pptx_data = None
+
+                    st.success(f"✅ {len(crops_list)} slide oluşturuldu!")
+                    st.rerun()
+
+                except MemoryError:
+                    st.error("❌ Bellek yetersiz! PDF çok büyük. Lütfen daha küçük bir dosya deneyin.")
+                except Exception as e:
+                    st.error(f"❌ Hata: {str(e)}")
+                    st.info("💡 Dosya çok büyükse, daha küçük parçalara bölmeyi deneyin.")
 
 st.markdown("---")
 
@@ -385,14 +423,18 @@ else:
 
     with st.expander("❓ Nasıl Çalışır?"):
         st.markdown("""
-        1. 📤 PDF dosyanızı yükleyin
+        1. 📤 PDF dosyanızı yükleyin (Max 100MB)
         2. 🚀 İşleme başlatın
         3. 📦 ZIP veya PowerPoint olarak indirin
 
         **Özellikler:**
         - Otomatik kırmızı başlık algılama
         - 16:9 PowerPoint slaytları
-        - Yüksek kalite (240 DPI)
+        - Optimize edilmiş kalite (150 DPI)
+
+        **Büyük dosyalar için:**
+        - PDF'nizi küçük parçalara bölün
+        - Veya online PDF sıkıştırma araçları kullanın
         """)
 
 st.markdown("---")
