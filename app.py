@@ -1,3 +1,4 @@
+import streamlit as st
 import io
 import zipfile
 import time
@@ -6,7 +7,6 @@ import numpy as np
 import fitz  # PyMuPDF
 import cv2
 from PIL import Image
-import streamlit as st
 from pptx import Presentation
 from pptx.util import Inches, Pt
 
@@ -162,20 +162,16 @@ def bgr_to_pil(bgr):
 def create_powerpoint(images_bytes_list):
     """Görselleri PowerPoint sunumuna dönüştür (16:9 optimize edilmiş)."""
     prs = Presentation()
-
-    # 16:9 oran ayarla (standart slide boyutu)
     prs.slide_width = Inches(10)
     prs.slide_height = Inches(5.625)
 
     for img_bytes in images_bytes_list:
-        blank_slide_layout = prs.slide_layouts[6]  # Blank layout
+        blank_slide_layout = prs.slide_layouts[6]
         slide = prs.slides.add_slide(blank_slide_layout)
-
         img = Image.open(io.BytesIO(img_bytes))
 
         img_width, img_height = img.size
         img_ratio = img_width / img_height
-
         slide_width = prs.slide_width
         slide_height = prs.slide_height
         slide_ratio = slide_width / slide_height
@@ -208,311 +204,162 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ---- Modern CSS Stilleri ----
-st.markdown(
-    """
-    <style>
-    h1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2.5rem !important; font-weight: 800 !important; margin-bottom: 0.5rem !important; }
-    .upload-card { background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); border: 2px dashed #667eea; border-radius: 20px; padding: 3rem 2rem; text-align: center; transition: all 0.3s ease; margin: 2rem 0; }
-    .upload-card:hover { border-color: #764ba2; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.2); transform: translateY(-2px); }
-    .stDownloadButton button { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important; color: white !important; border: none !important; border-radius: 12px !important; font-weight: 700 !important; padding: 0.7rem 2rem !important; box-shadow: 0 6px 20px rgba(245, 87, 108, 0.35) !important; transition: all 0.3s ease !important; width: 100% !important; }
-    .stDownloadButton button:hover { transform: translateY(-2px) !important; box-shadow: 0 8px 25px rgba(245, 87, 108, 0.45) !important; }
-    .stButton button[kind="secondary"] { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important; color: white !important; border: none !important; border-radius: 12px !important; font-weight: 700 !important; padding: 0.7rem 2rem !important; box-shadow: 0 6px 20px rgba(79, 172, 254, 0.35) !important; transition: all 0.3s ease !important; width: 100% !important; }
-    .stButton button[kind="secondary"]:hover { transform: translateY(-2px) !important; box-shadow: 0 8px 25px rgba(79, 172, 254, 0.45) !important; }
-    .stButton button[kind="primary"] { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important; border: none !important; border-radius: 12px !important; font-weight: 700 !important; padding: 0.7rem 2rem !important; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.35) !important; transition: all 0.3s ease !important; width: 100% !important; }
-    .stButton button[kind="primary"]:hover { transform: translateY(-2px) !important; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.45) !important; }
-    .stat-card { background: white; border-radius: 16px; padding: 1.5rem; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08); text-align: center; border-left: 4px solid; transition: all 0.3s ease; }
-    .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12); }
-    .stat-number { font-size: 2.5rem; font-weight: 800; margin: 0.5rem 0; }
-    .stat-label { color: #666; font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    [data-testid="stImage"] { border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); transition: all 0.3s ease; }
-    [data-testid="stImage"]:hover { transform: scale(1.02); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); }
-    .stAlert { border-radius: 12px; border-left: 4px solid #667eea; }
-    .success-message { background: linear-gradient(135deg, #84fab015 0%, #8fd3f415 100%); border: 2px solid #84fab0; border-radius: 16px; padding: 1.5rem; margin: 2rem 0; text-align: center; }
-    [data-testid="stFileUploader"] { border-radius: 16px; }
-    [data-testid="stFileUploader"] > div { border-radius: 16px; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+# CSS
+st.markdown("""
+<style>
+h1 { 
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+    -webkit-background-clip: text; 
+    -webkit-text-fill-color: transparent; 
+    font-size: 2.5rem !important; 
+    font-weight: 800 !important; 
+    margin-bottom: 0.5rem !important; 
+}
+.stButton button[kind="primary"] { 
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important; 
+    border: none !important; 
+    border-radius: 12px !important; 
+    font-weight: 700 !important; 
+    padding: 0.7rem 2rem !important; 
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.35) !important; 
+    transition: all 0.3s ease !important; 
+    width: 100% !important; 
+}
+.stDownloadButton button { 
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important; 
+    color: white !important; 
+    border: none !important; 
+    border-radius: 12px !important; 
+    font-weight: 700 !important; 
+    padding: 0.7rem 2rem !important; 
+    box-shadow: 0 6px 20px rgba(245, 87, 108, 0.35) !important; 
+    transition: all 0.3s ease !important; 
+    width: 100% !important; 
+}
+</style>
+""", unsafe_allow_html=True)
 
-# ---- Başlık ----
+# Başlık
 st.markdown("<h1>✂️ PDF Slide Kesici</h1>", unsafe_allow_html=True)
 st.markdown("### 🎯 Kırmızı başlık şeritlerine göre otomatik kesim")
 st.markdown("---")
 
-# ---- Dosya Yükleme Bölümü ----
-col1, col2, col3 = st.columns([1, 2, 1])
+# Dosya yükleme
+st.markdown("### 📁 PDF Dosyanızı Yükleyin")
+uploaded = st.file_uploader(
+    "PDF dosyasını sürükleyin veya seçin",
+    type=["pdf"],
+    accept_multiple_files=False,
+    label_visibility="collapsed"
+)
 
-with col2:
-    st.markdown("### 📁 PDF Dosyanızı Yükleyin")
-    uploaded = st.file_uploader(
-        "PDF dosyasını sürükleyin veya seçin",
-        type=["pdf"],
-        accept_multiple_files=False,
-        label_visibility="collapsed"
-    )
+if uploaded is not None:
+    file_size = len(uploaded.getvalue()) / (1024 * 1024)
+    st.success(f"✅ **{uploaded.name}** yüklendi ({file_size:.1f} MB)")
 
-    if uploaded is not None:
-        file_size = len(uploaded.getvalue()) / (1024 * 1024)
-        st.success(f"✅ **{uploaded.name}** yüklendi ({file_size:.1f} MB)")
+    if st.button("🚀 İşlemeyi Başlat", type="primary"):
+        try:
+            # PDF işleme
+            st.info("📄 PDF işleniyor...")
+            pdf_bytes = uploaded.getvalue()
+            pages = pdf_to_images(pdf_bytes, dpi=DPI)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+            st.info(f"🔍 {len(pages)} sayfa tespit edildi, işleniyor...")
 
-        # İşle butonu - tam genişlik
-        if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
-            try:
-                # Streamlit Cloud için güvenli başlatma
-                if "processing" not in st.session_state:
-                    st.session_state.processing = False
-                if "results" not in st.session_state:
-                    st.session_state.results = None
+            crops_pngs = []
+            total_bands = 0
 
-                st.session_state.processing = True
+            progress_bar = st.progress(0)
 
-                # PDF işleme
-                pdf_bytes = uploaded.getvalue()
-                st.info("📄 PDF yükleniyor...")
+            for idx, img in enumerate(pages):
+                try:
+                    bands, _ = find_header_bands(img)
+                    total_bands += len(bands)
+                    boxes = slice_by_headers(img, bands)
 
-                pages = pdf_to_images(pdf_bytes, dpi=DPI)
-                st.info(f"🔍 {len(pages)} sayfa tespit edildi, işleniyor...")
+                    for box in boxes:
+                        x0, y0, x1, y1 = box
+                        crop = img[y0:y1, x0:x1]
+                        pil_im = bgr_to_pil(crop)
+                        b = io.BytesIO()
+                        pil_im.save(b, format="PNG")
+                        crops_pngs.append(b.getvalue())
 
-                crops_pngs = []
-                total_bands = 0
+                except Exception as e:
+                    st.warning(f"⚠️ Sayfa {idx + 1} işlenirken hata: {str(e)}")
+                    continue
 
-                # Progress gösterimi
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+                progress_bar.progress((idx + 1) / len(pages))
 
-                for idx, img in enumerate(pages):
-                    status_text.text(f"🔍 Sayfa {idx + 1}/{len(pages)} işleniyor...")
+            progress_bar.empty()
 
-                    try:
-                        bands, _ = find_header_bands(img)
-                        total_bands += len(bands)
-                        boxes = slice_by_headers(img, bands)
+            if crops_pngs:
+                st.success(f"✅ İşlem tamamlandı! {len(crops_pngs)} slide oluşturuldu.")
 
-                        for box in boxes:
-                            x0, y0, x1, y1 = box
-                            crop = img[y0:y1, x0:x1]
-                            pil_im = bgr_to_pil(crop)
-                            b = io.BytesIO()
-                            pil_im.save(b, format="PNG")
-                            crops_pngs.append(b.getvalue())
-                    except Exception as page_error:
-                        st.warning(f"⚠️ Sayfa {idx + 1} işlenirken hata: {str(page_error)}")
-                        # Hatalı sayfayı atla, devam et
-                        continue
+                # İstatistikler
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("📄 Sayfa", len(pages))
+                with col2:
+                    st.metric("🎯 Başlık", total_bands)
+                with col3:
+                    st.metric("✂️ Kesim", len(crops_pngs))
 
-                    progress_bar.progress((idx + 1) / len(pages))
+                # ZIP indirme
+                zip_buf = io.BytesIO()
+                with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for i, data in enumerate(crops_pngs, start=1):
+                        zf.writestr(f"slide_{i:04d}.png", data)
+                zip_buf.seek(0)
 
-                # Progress temizle
-                progress_bar.empty()
-                status_text.empty()
+                st.download_button(
+                    label=f"📦 ZIP İndir ({len(crops_pngs)} görsel)",
+                    data=zip_buf,
+                    file_name="slides.zip",
+                    mime="application/zip"
+                )
 
-                if crops_pngs:
-                    # PowerPoint oluşturma
-                    st.info("📊 PowerPoint sunumu oluşturuluyor...")
-                    try:
-                        pptx_buffer = create_powerpoint(crops_pngs)
-                    except Exception as ppt_error:
-                        st.warning(f"⚠️ PowerPoint oluşturulamadı: {str(ppt_error)}")
-                        pptx_buffer = None
+                # PowerPoint
+                try:
+                    st.info("📊 PowerPoint oluşturuluyor...")
+                    pptx_buffer = create_powerpoint(crops_pngs)
 
-                    # Sonuçları kaydet
-                    st.session_state.results = {
-                        'crops_pngs': crops_pngs,
-                        'pages_count': len(pages),
-                        'bands_count': total_bands,
-                        'last_count': len(crops_pngs),
-                        'pptx_buffer': pptx_buffer
-                    }
-                    st.session_state.processing = False
+                    st.download_button(
+                        label="📥 PowerPoint İndir (.pptx)",
+                        data=pptx_buffer,
+                        file_name="sunum.pptx",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        type="primary"
+                    )
+                except Exception as e:
+                    st.warning(f"⚠️ PowerPoint oluşturulamadı: {str(e)}")
 
-                    # Başarı mesajı
-                    st.success(f"✅ İşlem tamamlandı! {len(crops_pngs)} slide oluşturuldu.")
-                    st.info("📥 İndirme butonları aktif - ZIP ve PowerPoint'i indirebilirsiniz!")
-                else:
-                    st.error("❌ Hiç slide oluşturulamadı. PDF'de kırmızı başlık şeritleri bulunamadı.")
-                    st.session_state.processing = False
+                # Önizleme
+                st.markdown("### 🖼️ Kesilen Görseller")
+                for i in range(0, len(crops_pngs), 3):
+                    cols = st.columns(3)
+                    for j in range(3):
+                        idx = i + j
+                        if idx < len(crops_pngs):
+                            data = crops_pngs[idx]
+                            try:
+                                im = Image.open(io.BytesIO(data))
+                                if im.mode != 'RGB':
+                                    im = im.convert('RGB')
+                                cols[j].image(im, caption=f"Slide {idx + 1:04d}")
+                            except Exception as e:
+                                cols[j].error(f"❌ Görsel yüklenemedi: {str(e)}")
+            else:
+                st.error("❌ Hiç slide oluşturulamadı. PDF'de kırmızı başlık şeritleri bulunamadı.")
 
-                    # İstatistikler ve indirme butonları
-                    # Sonuçları göster
-                    st.markdown("### 📊 İşlem Sonuçları")
-                    col1, col2, col3, col4 = st.columns(4)
+        except Exception as e:
+            st.error(f"❌ Hata oluştu: {str(e)}")
+            st.error("Lütfen PDF dosyanızı kontrol edin ve tekrar deneyin.")
 
-                    with col1:
-                        st.markdown(
-                            f"""
-                            <div class="stat-card" style="border-left-color: #667eea;">
-                                <div class="stat-label">📄 Sayfa</div>
-                                <div class="stat-number" style="color: #667eea;">{len(pages)}</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                    with col2:
-                        st.markdown(
-                            f"""
-                            <div class="stat-card" style="border-left-color: #f5576c;">
-                                <div class="stat-label">🎯 Başlık</div>
-                                <div class="stat-number" style="color: #f5576c;">{total_bands}</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                    with col3:
-                        st.markdown(
-                            f"""
-                            <div class="stat-card" style="border-left-color: #4facfe;">
-                                <div class="stat-label">✂️ Kesim</div>
-                                <div class="stat-number" style="color: #4facfe;">{len(crops_pngs)}</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                    with col4:
-                        # ZIP oluşturma
-                        zip_buf = io.BytesIO()
-                        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                            for i, data in enumerate(crops_pngs, start=1):
-                                zf.writestr(f"slide_{i:04d}.png", data)
-                        zip_buf.seek(0)
-
-                        st.download_button(
-                            label=f"📦 ZIP İndir ({len(crops_pngs)} görsel)",
-                            data=zip_buf,
-                            file_name="slides.zip",
-                            mime="application/zip",
-                            key="download_zip_btn"
-                        )
-
-                    st.markdown("<br>", unsafe_allow_html=True)
-
-                    # PowerPoint indirme
-                    col_ppt1, col_ppt2, col_ppt3 = st.columns([1, 2, 1])
-                    with col_ppt2:
-                        if st.session_state.results['pptx_buffer'] is not None:
-                            st.download_button(
-                                label="📥 PowerPoint'i İndir (.pptx)",
-                                data=st.session_state.results['pptx_buffer'],
-                                file_name="sunum.pptx",
-                                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                                type="primary",
-                                key="download_ppt_btn"
-                            )
-                        else:
-                            st.warning("⚠️ PowerPoint oluşturulamadı, sadece ZIP indirebilirsiniz")
-
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown("---")
-
-                    # Önizleme
-                    st.markdown("### 🖼️ Kesilen Görseller")
-                    st.caption("💡 Görsellerin üzerine gelerek büyütebilirsiniz")
-
-                    # Görselleri göster - 3 sütunlu grid
-                    for i in range(0, len(crops_pngs), 3):
-                        cols = st.columns(3)
-                        for j in range(3):
-                            idx = i + j
-                            if idx < len(crops_pngs):
-                                data = crops_pngs[idx]
-                                try:
-                                    im = Image.open(io.BytesIO(data))
-                                    if im.mode != 'RGB':
-                                        im = im.convert('RGB')
-                                    cols[j].image(im, caption=f"Slide {idx + 1:04d}")
-                                except Exception as e:
-                                    cols[j].error(f"❌ Görsel yüklenemedi: {str(e)}")
-
-            except Exception as e:
-                st.error(f"❌ Hata oluştu: {str(e)}")
-                st.error("Lütfen PDF dosyanızı kontrol edin ve tekrar deneyin.")
-
-# ---- Kalıcı İndirme Butonları (Session boyunca) ----
-if hasattr(st.session_state, 'results') and st.session_state.results and not getattr(st.session_state, 'processing',
-                                                                                     False):
-    st.markdown("---")
-    st.markdown("### 📥 İndirme Butonları")
-    st.info("💾 Bu butonlar session boyunca aktif kalır - istediğiniz zaman indirebilirsiniz")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        # ZIP indirme
-        zip_buf = io.BytesIO()
-        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for i, data in enumerate(st.session_state.results['crops_pngs'], start=1):
-                zf.writestr(f"slide_{i:04d}.png", data)
-        zip_buf.seek(0)
-
-        st.download_button(
-            label=f"📦 ZIP İndir ({st.session_state.results['last_count']} görsel)",
-            data=zip_buf,
-            file_name="slides.zip",
-            mime="application/zip",
-            key="persistent_zip_btn"
-        )
-
-    with col2:
-        # PowerPoint indirme
-        if st.session_state.results['pptx_buffer'] is not None:
-            st.download_button(
-                label="📥 PowerPoint İndir (.pptx)",
-                data=st.session_state.results['pptx_buffer'],
-                file_name="sunum.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                type="primary",
-                key="persistent_ppt_btn"
-            )
-        else:
-            st.warning("⚠️ PowerPoint mevcut değil")
-
-st.markdown("---")
-
-# ---- Bilgi Bölümü ----
-st.info("👆 PDF dosyanızı yükleyin ve işleme başlatın", icon="ℹ️")
-
-with st.expander("❓ Nasıl Çalışır?"):
-    st.markdown(
-        """
-    **Bu araç neler yapar?**
-
-    1. 📤 PDF dosyanızı yüklersiniz
-    2. 🔍 Sistem kırmızı başlık şeritlerini otomatik tespit eder
-    3. ✂️ Her başlık arasını ayrı görsel olarak keser
-    4. 📦 Tüm görselleri ZIP dosyası olarak indirebilirsiniz
-    5. 🎯 PowerPoint sunumu oluşturabilirsiniz
-
-    **Önemli notlar:**
-    - Her işlem için PDF'i tekrar yüklemeniz gerekir
-    - Kırmızı başlık şeritleri otomatik tespit edilir
-    - Yüksek kaliteli çıktı (DPI: 240)
-    """
-    )
-
-with st.expander("⚙️ Özellikler"):
-    st.markdown(
-        """
-    - ✨ Otomatik kırmızı renk algılama
-    - 🎯 Akıllı şerit birleştirme
-    - 📏 Otomatik padding ayarı
-    - 🖼️ Yüksek kaliteli çıktı (DPI: 240)
-    - 📦 Toplu ZIP indirme desteği
-    - 🎯 PowerPoint sunumu oluşturma (16:9)
-    - 📐 Otomatik slide optimizasyonu
-    - 👁️ Canlı önizleme
-    - 🔄 Basit ve güvenilir arayüz
-    """
-    )
+else:
+    st.info("👆 PDF dosyanızı yükleyin ve işleme başlatın", icon="ℹ️")
 
 # Footer
-st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("---")
-st.markdown(
-    "<p style='text-align: center; color: #999; font-size: 0.9rem;'>Made with ❤️ using Streamlit</p>",
-    unsafe_allow_html=True,
-)
+st.markdown("<p style='text-align: center; color: #999; font-size: 0.9rem;'>Made with ❤️ using Streamlit</p>",
+            unsafe_allow_html=True)
