@@ -2,6 +2,7 @@ import io
 import zipfile
 from pathlib import Path
 from itertools import count
+import time
 
 import numpy as np
 import fitz  # PyMuPDF
@@ -247,9 +248,30 @@ def _ensure_state():
         st.session_state.pptx_buffer = None
     if "show_preview" not in st.session_state:
         st.session_state.show_preview = False
+    if "preview_timestamp" not in st.session_state:
+        st.session_state.preview_timestamp = None
+    if "downloaded" not in st.session_state:
+        st.session_state.downloaded = False
 
 
 _ensure_state()
+
+
+# Otomatik temizlik kontrolü (5 dakika)
+def check_auto_cleanup():
+    if st.session_state.show_preview and st.session_state.preview_timestamp:
+        elapsed = time.time() - st.session_state.preview_timestamp
+        if elapsed > 300:  # 5 dakika = 300 saniye
+            st.session_state.show_preview = False
+            st.session_state.crops_pngs = []
+            st.session_state.processed = False
+            st.session_state.pptx_created = False
+            st.session_state.pptx_buffer = None
+            st.session_state.downloaded = False
+            st.rerun()
+
+
+check_auto_cleanup()
 
 # ---- Modern CSS Stilleri ----
 st.markdown(
@@ -524,13 +546,20 @@ if st.session_state.processed and st.session_state.crops_pngs:
                 zf.writestr(f"slide_{i:04d}.png", data)
         zip_buf.seek(0)
 
-        st.download_button(
-            label=f"📦 ZIP İndir\n({st.session_state.last_count} görsel)",
-            data=zip_buf,
-            file_name="slides.zip",
-            mime="application/zip",
-            key="download_zip"
-        )
+        if st.download_button(
+                label=f"📦 ZIP İndir\n({st.session_state.last_count} görsel)",
+                data=zip_buf,
+                file_name="slides.zip",
+                mime="application/zip",
+                key="download_zip"
+        ):
+            # İndirme yapıldı, önizlemeyi temizle
+            st.session_state.show_preview = False
+            st.session_state.crops_pngs = []
+            st.session_state.processed = False
+            st.session_state.downloaded = True
+            time.sleep(0.5)  # Kısa gecikme
+            st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -550,26 +579,48 @@ if st.session_state.processed and st.session_state.crops_pngs:
             st.success(f"✅ PowerPoint hazır! {st.session_state.last_count} slide içeriyor.")
 
             # PPTX indirme butonu
-            st.download_button(
-                label="📥 PowerPoint'i İndir (.pptx)",
-                data=st.session_state.pptx_buffer,
-                file_name="sunum.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                type="primary",
-                key="download_ppt"
-            )
+            if st.download_button(
+                    label="📥 PowerPoint'i İndir (.pptx)",
+                    data=st.session_state.pptx_buffer,
+                    file_name="sunum.pptx",
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    type="primary",
+                    key="download_ppt"
+            ):
+                # İndirme yapıldı, önizlemeyi temizle
+                st.session_state.show_preview = False
+                st.session_state.crops_pngs = []
+                st.session_state.processed = False
+                st.session_state.pptx_created = False
+                st.session_state.pptx_buffer = None
+                st.session_state.downloaded = True
+                time.sleep(0.5)  # Kısa gecikme
+                st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("---")
 
     # Önizleme bölümü - sadece show_preview True ise göster
     if st.session_state.show_preview:
+        # Kalan süreyi hesapla
+        if st.session_state.preview_timestamp:
+            elapsed = time.time() - st.session_state.preview_timestamp
+            remaining = max(0, 300 - int(elapsed))  # 5 dakika = 300 saniye
+            minutes = remaining // 60
+            seconds = remaining % 60
+
         st.markdown("### 🖼️ Kesilen Görseller")
 
-        col_toggle1, col_toggle2, col_toggle3 = st.columns([1, 1, 1])
-        with col_toggle2:
-            if st.button("🗑️ Önizlemeyi Temizle", key="clear_preview"):
+        col_info1, col_info2, col_info3 = st.columns([1, 1, 1])
+        with col_info1:
+            st.info(f"⏱️ Otomatik temizlik: {minutes}:{seconds:02d}")
+        with col_info2:
+            st.caption("ZIP veya PPTX indirince otomatik silinir")
+        with col_info3:
+            if st.button("🗑️ Şimdi Temizle", key="clear_preview"):
                 st.session_state.show_preview = False
+                st.session_state.crops_pngs = []
+                st.session_state.processed = False
                 st.rerun()
 
         st.caption("Görsellerin üzerine gelerek büyütebilirsiniz")
@@ -585,9 +636,17 @@ if st.session_state.processed and st.session_state.crops_pngs:
                     with cols[j]:
                         st_image_compat(cols[j], im, caption=f"Slide {idx + 1:04d}")
 
+        # Her 10 saniyede bir yenile (countdown için)
+        time.sleep(0.1)
+        st.rerun()
+
 else:
     # Boş durum mesajı
-    st.info("👆 PDF dosyanızı yükleyin ve işleme başlatın", icon="ℹ️")
+    if st.session_state.downloaded:
+        st.success("✅ Dosyanız indirildi! Önizleme temizlendi.")
+        st.info("👆 Yeni bir PDF yükleyerek tekrar işlem yapabilirsiniz", icon="ℹ️")
+    else:
+        st.info("👆 PDF dosyanızı yükleyin ve işleme başlatın", icon="ℹ️")
 
     # Nasıl çalışır bölümü
     with st.expander("❓ Nasıl Çalışır?"):
