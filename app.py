@@ -262,25 +262,36 @@ with col2:
         # İşle butonu - tam genişlik
         if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
             try:
-                # İşlem durumunu session state'e kaydet
+                # Streamlit Cloud için güvenli başlatma
+                if "processing" not in st.session_state:
+                    st.session_state.processing = False
+                if "results" not in st.session_state:
+                    st.session_state.results = None
+
                 st.session_state.processing = True
-                st.session_state.results = None
 
-                with st.spinner("📄 PDF işleniyor..."):
-                    pdf_bytes = uploaded.getvalue()
-                    pages = pdf_to_images(pdf_bytes, dpi=DPI)
+                # PDF işleme
+                pdf_bytes = uploaded.getvalue()
+                st.info("📄 PDF yükleniyor...")
 
-                    crops_pngs = []
-                    total_bands = 0
+                pages = pdf_to_images(pdf_bytes, dpi=DPI)
+                st.info(f"🔍 {len(pages)} sayfa tespit edildi, işleniyor...")
 
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
+                crops_pngs = []
+                total_bands = 0
 
-                    for idx, img in enumerate(pages):
-                        status_text.text(f"🔍 Sayfa {idx + 1}/{len(pages)} işleniyor...")
+                # Progress gösterimi
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                for idx, img in enumerate(pages):
+                    status_text.text(f"🔍 Sayfa {idx + 1}/{len(pages)} işleniyor...")
+
+                    try:
                         bands, _ = find_header_bands(img)
                         total_bands += len(bands)
                         boxes = slice_by_headers(img, bands)
+
                         for box in boxes:
                             x0, y0, x1, y1 = box
                             crop = img[y0:y1, x0:x1]
@@ -288,26 +299,42 @@ with col2:
                             b = io.BytesIO()
                             pil_im.save(b, format="PNG")
                             crops_pngs.append(b.getvalue())
+                    except Exception as page_error:
+                        st.warning(f"⚠️ Sayfa {idx + 1} işlenirken hata: {str(page_error)}")
+                        # Hatalı sayfayı atla, devam et
+                        continue
 
-                        progress_bar.progress((idx + 1) / len(pages))
+                    progress_bar.progress((idx + 1) / len(pages))
 
-                    # Progress bar ve status'u temizle
-                    progress_bar.empty()
-                    status_text.empty()
+                # Progress temizle
+                progress_bar.empty()
+                status_text.empty()
 
-                    # Sonuçları session state'e kaydet
+                if crops_pngs:
+                    # PowerPoint oluşturma
+                    st.info("📊 PowerPoint sunumu oluşturuluyor...")
+                    try:
+                        pptx_buffer = create_powerpoint(crops_pngs)
+                    except Exception as ppt_error:
+                        st.warning(f"⚠️ PowerPoint oluşturulamadı: {str(ppt_error)}")
+                        pptx_buffer = None
+
+                    # Sonuçları kaydet
                     st.session_state.results = {
                         'crops_pngs': crops_pngs,
                         'pages_count': len(pages),
                         'bands_count': total_bands,
                         'last_count': len(crops_pngs),
-                        'pptx_buffer': create_powerpoint(crops_pngs)
+                        'pptx_buffer': pptx_buffer
                     }
                     st.session_state.processing = False
 
                     # Başarı mesajı
                     st.success(f"✅ İşlem tamamlandı! {len(crops_pngs)} slide oluşturuldu.")
                     st.info("📥 İndirme butonları aktif - ZIP ve PowerPoint'i indirebilirsiniz!")
+                else:
+                    st.error("❌ Hiç slide oluşturulamadı. PDF'de kırmızı başlık şeritleri bulunamadı.")
+                    st.session_state.processing = False
 
                     # İstatistikler ve indirme butonları
                     # Sonuçları göster
@@ -368,14 +395,17 @@ with col2:
                     # PowerPoint indirme
                     col_ppt1, col_ppt2, col_ppt3 = st.columns([1, 2, 1])
                     with col_ppt2:
-                        st.download_button(
-                            label="📥 PowerPoint'i İndir (.pptx)",
-                            data=st.session_state.results['pptx_buffer'],
-                            file_name="sunum.pptx",
-                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                            type="primary",
-                            key="download_ppt_btn"
-                        )
+                        if st.session_state.results['pptx_buffer'] is not None:
+                            st.download_button(
+                                label="📥 PowerPoint'i İndir (.pptx)",
+                                data=st.session_state.results['pptx_buffer'],
+                                file_name="sunum.pptx",
+                                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                type="primary",
+                                key="download_ppt_btn"
+                            )
+                        else:
+                            st.warning("⚠️ PowerPoint oluşturulamadı, sadece ZIP indirebilirsiniz")
 
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.markdown("---")
@@ -429,14 +459,17 @@ if hasattr(st.session_state, 'results') and st.session_state.results and not get
 
     with col2:
         # PowerPoint indirme
-        st.download_button(
-            label="📥 PowerPoint İndir (.pptx)",
-            data=st.session_state.results['pptx_buffer'],
-            file_name="sunum.pptx",
-            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            type="primary",
-            key="persistent_ppt_btn"
-        )
+        if st.session_state.results['pptx_buffer'] is not None:
+            st.download_button(
+                label="📥 PowerPoint İndir (.pptx)",
+                data=st.session_state.results['pptx_buffer'],
+                file_name="sunum.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                type="primary",
+                key="persistent_ppt_btn"
+            )
+        else:
+            st.warning("⚠️ PowerPoint mevcut değil")
 
 st.markdown("---")
 
