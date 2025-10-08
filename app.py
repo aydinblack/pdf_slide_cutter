@@ -24,17 +24,6 @@ PAD_BOTTOM = 12
 
 # ========================= Yardımcılar =========================
 
-def st_image_compat(col, img, caption=None):
-    """Streamlit sürüm farkı için uyumlu görüntüleme."""
-    try:
-        col.image(img, caption=caption, width='stretch')
-    except TypeError:
-        try:
-            col.image(img, caption=caption, use_container_width=True)
-        except TypeError:
-            col.image(img, caption=caption, use_column_width=True)
-
-
 def pdf_to_images(file_bytes: bytes, dpi: int = DPI):
     """PDF dosyasını (bytes) sayfa görsellerine çevirir (BGR numpy)."""
     doc = fitz.open(stream=file_bytes, filetype="pdf")
@@ -181,43 +170,31 @@ def create_powerpoint(images_bytes_list):
     prs.slide_height = Inches(5.625)
 
     for img_bytes in images_bytes_list:
-        # Boş slide ekle
         blank_slide_layout = prs.slide_layouts[6]  # Blank layout
         slide = prs.slides.add_slide(blank_slide_layout)
 
-        # Görseli PIL olarak aç
         img = Image.open(io.BytesIO(img_bytes))
 
-        # Görsel boyutlarını al
         img_width, img_height = img.size
         img_ratio = img_width / img_height
 
-        # Slide boyutları
         slide_width = prs.slide_width
         slide_height = prs.slide_height
         slide_ratio = slide_width / slide_height
 
-        # Görseli slide'a sığdır (aspect ratio koruyarak)
         if img_ratio > slide_ratio:
-            # Görsel daha geniş - genişliğe göre ayarla
             pic_width = slide_width
             pic_height = int(slide_width / img_ratio)
         else:
-            # Görsel daha uzun - yüksekliğe göre ayarla
             pic_height = slide_height
             pic_width = int(slide_height * img_ratio)
 
-        # Görseli ortala
         left = (slide_width - pic_width) // 2
         top = (slide_height - pic_height) // 2
 
-        # Geçici bytes buffer'a kaydet
         img_buffer = io.BytesIO(img_bytes)
-
-        # Slide'a ekle
         slide.shapes.add_picture(img_buffer, left, top, width=pic_width, height=pic_height)
 
-    # PowerPoint'i bytes olarak döndür
     pptx_buffer = io.BytesIO()
     prs.save(pptx_buffer)
     pptx_buffer.seek(0)
@@ -236,192 +213,41 @@ st.set_page_config(
 
 # Kalıcı durum
 def _ensure_state():
-    if "crops_pngs" not in st.session_state:
-        st.session_state.crops_pngs = []
-    if "last_count" not in st.session_state:
-        st.session_state.last_count = 0
-    if "processed" not in st.session_state:
-        st.session_state.processed = False
-    if "pptx_created" not in st.session_state:
-        st.session_state.pptx_created = False
-    if "pptx_buffer" not in st.session_state:
-        st.session_state.pptx_buffer = None
-    if "show_preview" not in st.session_state:
-        st.session_state.show_preview = False
-    if "preview_timestamp" not in st.session_state:
-        st.session_state.preview_timestamp = None
-    if "downloaded" not in st.session_state:
-        st.session_state.downloaded = False
+    ss = st.session_state
+    ss.setdefault("crops_pngs", [])
+    ss.setdefault("last_count", 0)
+    ss.setdefault("processed", False)
+    ss.setdefault("pptx_created", False)
+    ss.setdefault("pptx_buffer", None)
+    ss.setdefault("show_preview", False)
+    ss.setdefault("last_uploaded_file_id", None)  # Yüklenen dosyayı takip için
 
 
 _ensure_state()
-
-
-# Otomatik temizlik kontrolü (5 dakika)
-def check_auto_cleanup():
-    if st.session_state.show_preview and st.session_state.preview_timestamp:
-        elapsed = time.time() - st.session_state.preview_timestamp
-        if elapsed > 300:  # 5 dakika = 300 saniye
-            st.session_state.show_preview = False
-            st.session_state.crops_pngs = []
-            st.session_state.processed = False
-            st.session_state.pptx_created = False
-            st.session_state.pptx_buffer = None
-            st.session_state.downloaded = False
-            st.rerun()
-
-
-check_auto_cleanup()
 
 # ---- Modern CSS Stilleri ----
 st.markdown(
     """
     <style>
-    /* Ana başlık stili */
-    h1 {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 2.5rem !important;
-        font-weight: 800 !important;
-        margin-bottom: 0.5rem !important;
-    }
-
-    /* Kart stilleri */
-    .upload-card {
-        background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-        border: 2px dashed #667eea;
-        border-radius: 20px;
-        padding: 3rem 2rem;
-        text-align: center;
-        transition: all 0.3s ease;
-        margin: 2rem 0;
-    }
-
-    .upload-card:hover {
-        border-color: #764ba2;
-        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.2);
-        transform: translateY(-2px);
-    }
-
-    /* Buton stilleri */
-    .stDownloadButton button {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 12px !important;
-        font-weight: 700 !important;
-        padding: 0.7rem 2rem !important;
-        box-shadow: 0 6px 20px rgba(245, 87, 108, 0.35) !important;
-        transition: all 0.3s ease !important;
-        width: 100% !important;
-    }
-
-    .stDownloadButton button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(245, 87, 108, 0.45) !important;
-    }
-
-    /* İkincil buton (Slide'lara Aktar) */
-    .stButton button[kind="secondary"] {
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 12px !important;
-        font-weight: 700 !important;
-        padding: 0.7rem 2rem !important;
-        box-shadow: 0 6px 20px rgba(79, 172, 254, 0.35) !important;
-        transition: all 0.3s ease !important;
-        width: 100% !important;
-    }
-
-    .stButton button[kind="secondary"]:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(79, 172, 254, 0.45) !important;
-    }
-    .stButton button[kind="primary"] {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        border: none !important;
-        border-radius: 12px !important;
-        font-weight: 700 !important;
-        padding: 0.7rem 2rem !important;
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.35) !important;
-        transition: all 0.3s ease !important;
-        width: 100% !important;
-    }
-
-    .stButton button[kind="primary"]:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.45) !important;
-    }
-
-    /* İstatistik kartları */
-    .stat-card {
-        background: white;
-        border-radius: 16px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-        text-align: center;
-        border-left: 4px solid;
-        transition: all 0.3s ease;
-    }
-
-    .stat-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-    }
-
-    .stat-number {
-        font-size: 2.5rem;
-        font-weight: 800;
-        margin: 0.5rem 0;
-    }
-
-    .stat-label {
-        color: #666;
-        font-size: 0.95rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    /* Önizleme kartları */
-    [data-testid="stImage"] {
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-    }
-
-    [data-testid="stImage"]:hover {
-        transform: scale(1.02);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-    }
-
-    /* Info kutusu */
-    .stAlert {
-        border-radius: 12px;
-        border-left: 4px solid #667eea;
-    }
-
-    /* Başarı mesajı */
-    .success-message {
-        background: linear-gradient(135deg, #84fab015 0%, #8fd3f415 100%);
-        border: 2px solid #84fab0;
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin: 2rem 0;
-        text-align: center;
-    }
-
-    /* File uploader stili */
-    [data-testid="stFileUploader"] {
-        border-radius: 16px;
-    }
-
-    [data-testid="stFileUploader"] > div {
-        border-radius: 16px;
-    }
+    h1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2.5rem !important; font-weight: 800 !important; margin-bottom: 0.5rem !important; }
+    .upload-card { background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); border: 2px dashed #667eea; border-radius: 20px; padding: 3rem 2rem; text-align: center; transition: all 0.3s ease; margin: 2rem 0; }
+    .upload-card:hover { border-color: #764ba2; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.2); transform: translateY(-2px); }
+    .stDownloadButton button { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important; color: white !important; border: none !important; border-radius: 12px !important; font-weight: 700 !important; padding: 0.7rem 2rem !important; box-shadow: 0 6px 20px rgba(245, 87, 108, 0.35) !important; transition: all 0.3s ease !important; width: 100% !important; }
+    .stDownloadButton button:hover { transform: translateY(-2px) !important; box-shadow: 0 8px 25px rgba(245, 87, 108, 0.45) !important; }
+    .stButton button[kind="secondary"] { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important; color: white !important; border: none !important; border-radius: 12px !important; font-weight: 700 !important; padding: 0.7rem 2rem !important; box-shadow: 0 6px 20px rgba(79, 172, 254, 0.35) !important; transition: all 0.3s ease !important; width: 100% !important; }
+    .stButton button[kind="secondary"]:hover { transform: translateY(-2px) !important; box-shadow: 0 8px 25px rgba(79, 172, 254, 0.45) !important; }
+    .stButton button[kind="primary"] { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important; border: none !important; border-radius: 12px !important; font-weight: 700 !important; padding: 0.7rem 2rem !important; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.35) !important; transition: all 0.3s ease !important; width: 100% !important; }
+    .stButton button[kind="primary"]:hover { transform: translateY(-2px) !important; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.45) !important; }
+    .stat-card { background: white; border-radius: 16px; padding: 1.5rem; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08); text-align: center; border-left: 4px solid; transition: all 0.3s ease; }
+    .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12); }
+    .stat-number { font-size: 2.5rem; font-weight: 800; margin: 0.5rem 0; }
+    .stat-label { color: #666; font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    [data-testid="stImage"] { border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); transition: all 0.3s ease; }
+    [data-testid="stImage"]:hover { transform: scale(1.02); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); }
+    .stAlert { border-radius: 12px; border-left: 4px solid #667eea; }
+    .success-message { background: linear-gradient(135deg, #84fab015 0%, #8fd3f415 100%); border: 2px solid #84fab0; border-radius: 16px; padding: 1.5rem; margin: 2rem 0; text-align: center; }
+    [data-testid="stFileUploader"] { border-radius: 16px; }
+    [data-testid="stFileUploader"] > div { border-radius: 16px; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -444,7 +270,20 @@ with col2:
         label_visibility="collapsed"
     )
 
-    if uploaded:
+    # Yeni dosya yüklendiğinde önceki verileri temizle
+    if uploaded is not None:
+        current_file_id = f"{uploaded.name}_{uploaded.size}"
+
+        # Eğer farklı bir dosya yüklendiyse, önceki verileri temizle
+        if st.session_state.last_uploaded_file_id != current_file_id:
+            st.session_state.crops_pngs = []
+            st.session_state.last_count = 0
+            st.session_state.processed = False
+            st.session_state.pptx_created = False
+            st.session_state.pptx_buffer = None
+            st.session_state.show_preview = False
+            st.session_state.last_uploaded_file_id = current_file_id
+
         file_size = len(uploaded.getvalue()) / (1024 * 1024)
         st.success(f"✅ **{uploaded.name}** yüklendi ({file_size:.1f} MB)")
 
@@ -454,7 +293,6 @@ with col2:
         if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
             pdf_bytes = uploaded.getvalue()
 
-            # Progress bar ile işleme
             progress_bar = st.progress(0)
             status_text = st.empty()
 
@@ -485,13 +323,19 @@ with col2:
             status_text.text("✨ Tamamlanıyor...")
             progress_bar.progress(100)
 
+            time.sleep(0.3)  # Kısa bekleme
+
             # Duruma kaydet
             st.session_state.crops_pngs = crops_pngs
             st.session_state.last_count = len(crops_pngs)
             st.session_state.processed = True
             st.session_state.pages_count = len(pages)
             st.session_state.bands_count = total_bands
+            st.session_state.show_preview = True
+            st.session_state.pptx_created = False
+            st.session_state.pptx_buffer = None
 
+            # Progress bar ve status'u tamamen temizle
             status_text.empty()
             progress_bar.empty()
 
@@ -501,7 +345,6 @@ st.markdown("---")
 
 # ---- İstatistikler ve İndirme ----
 if st.session_state.processed and st.session_state.crops_pngs:
-    # İstatistik kartları
     st.markdown("### 📊 İşlem Sonuçları")
     col1, col2, col3, col4 = st.columns(4)
 
@@ -539,27 +382,20 @@ if st.session_state.processed and st.session_state.crops_pngs:
         )
 
     with col4:
-        # ZIP indirme butonu
+        # ZIP oluşturma - sadece indirme anında
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for i, data in enumerate(st.session_state.crops_pngs, start=1):
                 zf.writestr(f"slide_{i:04d}.png", data)
         zip_buf.seek(0)
 
-        if st.download_button(
-                label=f"📦 ZIP İndir\n({st.session_state.last_count} görsel)",
-                data=zip_buf,
-                file_name="slides.zip",
-                mime="application/zip",
-                key="download_zip"
-        ):
-            # İndirme yapıldı, önizlemeyi temizle
-            st.session_state.show_preview = False
-            st.session_state.crops_pngs = []
-            st.session_state.processed = False
-            st.session_state.downloaded = True
-            time.sleep(0.5)  # Kısa gecikme
-            st.rerun()
+        st.download_button(
+            label=f"📦 ZIP İndir ({st.session_state.last_count} görsel)",
+            data=zip_buf,
+            file_name="slides.zip",
+            mime="application/zip",
+            key="download_zip_btn"
+        )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -568,124 +404,104 @@ if st.session_state.processed and st.session_state.crops_pngs:
 
     with col_ppt2:
         if not st.session_state.pptx_created:
-            if st.button("🎯 Slide'lara Aktar (PowerPoint Oluştur)", type="secondary", key="create_ppt"):
+            if st.button("🎯 Slide'lara Aktar (PowerPoint Oluştur)", type="secondary", key="create_ppt_btn"):
                 with st.spinner("📊 PowerPoint sunumu oluşturuluyor..."):
                     pptx_buffer = create_powerpoint(st.session_state.crops_pngs)
                     st.session_state.pptx_buffer = pptx_buffer
                     st.session_state.pptx_created = True
-                    st.success(f"✅ PowerPoint sunumu hazır! {st.session_state.last_count} slide oluşturuldu.")
-                    st.rerun()
+                st.rerun()
         else:
             st.success(f"✅ PowerPoint hazır! {st.session_state.last_count} slide içeriyor.")
 
-            # PPTX indirme butonu
-            if st.download_button(
-                    label="📥 PowerPoint'i İndir (.pptx)",
-                    data=st.session_state.pptx_buffer,
-                    file_name="sunum.pptx",
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    type="primary",
-                    key="download_ppt"
-            ):
-                # İndirme yapıldı, önizlemeyi temizle
-                st.session_state.show_preview = False
-                st.session_state.crops_pngs = []
-                st.session_state.processed = False
-                st.session_state.pptx_created = False
-                st.session_state.pptx_buffer = None
-                st.session_state.downloaded = True
-                time.sleep(0.5)  # Kısa gecikme
-                st.rerun()
+            st.download_button(
+                label="📥 PowerPoint'i İndir (.pptx)",
+                data=st.session_state.pptx_buffer,
+                file_name="sunum.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                type="primary",
+                key="download_ppt_btn"
+            )
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # Önizleme bölümü - sadece show_preview True ise göster
+    # Önizleme bölümü
     if st.session_state.show_preview:
-        # Kalan süreyi hesapla
-        if st.session_state.preview_timestamp:
-            elapsed = time.time() - st.session_state.preview_timestamp
-            remaining = max(0, 300 - int(elapsed))  # 5 dakika = 300 saniye
-            minutes = remaining // 60
-            seconds = remaining % 60
-
         st.markdown("### 🖼️ Kesilen Görseller")
 
-        col_info1, col_info2, col_info3 = st.columns([1, 1, 1])
+        # Bilgi mesajı
+        col_info1, col_info2 = st.columns([3, 1])
         with col_info1:
-            st.info(f"⏱️ Otomatik temizlik: {minutes}:{seconds:02d}")
+            st.info("ℹ️ Yeni bir PDF yüklediğinizde veya sekmeyi kapattığınızda önizleme otomatik silinir", icon="ℹ️")
         with col_info2:
-            st.caption("ZIP veya PPTX indirince otomatik silinir")
-        with col_info3:
-            if st.button("🗑️ Şimdi Temizle", key="clear_preview"):
-                st.session_state.show_preview = False
+            if st.button("🗑️ Önizlemeyi Temizle", key="clear_preview_btn"):
                 st.session_state.crops_pngs = []
                 st.session_state.processed = False
+                st.session_state.pptx_created = False
+                st.session_state.pptx_buffer = None
+                st.session_state.show_preview = False
                 st.rerun()
 
-        st.caption("Görsellerin üzerine gelerek büyütebilirsiniz")
+        st.caption("💡 Görsellerin üzerine gelerek büyütebilirsiniz")
 
-        # Izgara görünümü - 3 sütun
+        # Görselleri göster - 3 sütunlu grid
         for i in range(0, len(st.session_state.crops_pngs), 3):
             cols = st.columns(3)
             for j in range(3):
                 idx = i + j
                 if idx < len(st.session_state.crops_pngs):
                     data = st.session_state.crops_pngs[idx]
-                    im = Image.open(io.BytesIO(data)).convert("RGB")
-                    with cols[j]:
-                        st_image_compat(cols[j], im, caption=f"Slide {idx + 1:04d}")
-
-        # Her 10 saniyede bir yenile (countdown için)
-        time.sleep(0.1)
-        st.rerun()
+                    try:
+                        im = Image.open(io.BytesIO(data))
+                        # RGB'ye çevir
+                        if im.mode != 'RGB':
+                            im = im.convert('RGB')
+                        # Streamlit'e göster
+                        cols[j].image(im, caption=f"Slide {idx + 1:04d}", use_column_width=True)
+                    except Exception as e:
+                        cols[j].error(f"❌ Görsel yüklenemedi: {str(e)}")
 
 else:
-    # Boş durum mesajı
-    if st.session_state.downloaded:
-        st.success("✅ Dosyanız indirildi! Önizleme temizlendi.")
-        st.info("👆 Yeni bir PDF yükleyerek tekrar işlem yapabilirsiniz", icon="ℹ️")
-    else:
-        st.info("👆 PDF dosyanızı yükleyin ve işleme başlatın", icon="ℹ️")
+    st.info("👆 PDF dosyanızı yükleyin ve işleme başlatın", icon="ℹ️")
 
-    # Nasıl çalışır bölümü
     with st.expander("❓ Nasıl Çalışır?"):
-        st.markdown("""
+        st.markdown(
+            """
         **Bu araç neler yapar?**
 
         1. 📤 PDF dosyanızı yüklersiniz
         2. 🔍 Sistem kırmızı başlık şeritlerini otomatik tespit eder
         3. ✂️ Her başlık arasını ayrı görsel olarak keser
         4. 📦 Tüm görselleri ZIP dosyası olarak indirebilirsiniz
+        5. 🎯 PowerPoint sunumu oluşturabilirsiniz
 
-        **İdeal kullanım alanları:**
-        - Sunum slaytlarını ayırmak
-        - Ders notlarını bölümlere ayırmak
-        - Rapor sayfalarını bireysel görsellere dönüştürmek
-
-        **Teknik detaylar:**
-        - DPI: 240 (yüksek kalite)
-        - Format: PNG (görsel) / PPTX (sunum)
-        - Otomatik padding ve hizalama
-        - 16:9 oranında PowerPoint slayları
-        """)
+        **Önemli notlar:**
+        - Yeni bir PDF yüklediğinizde önceki veriler otomatik silinir
+        - Sekmeyi kapatıp açtığınızda önizleme kaybolur
+        - Her işlem için tekrar PDF yüklemeniz gerekir
+        """
+        )
 
     with st.expander("⚙️ Özellikler"):
-        st.markdown("""
+        st.markdown(
+            """
         - ✨ Otomatik kırmızı renk algılama
         - 🎯 Akıllı şerit birleştirme
         - 📏 Otomatik padding ayarı
-        - 🖼️ Yüksek kaliteli çıktı
-        - 📦 Toplu indirme desteği
-        - 🎯 PowerPoint sunumu oluşturma
+        - 🖼️ Yüksek kaliteli çıktı (DPI: 240)
+        - 📦 Toplu ZIP indirme desteği
+        - 🎯 PowerPoint sunumu oluşturma (16:9)
         - 📐 Otomatik slide optimizasyonu
         - 👁️ Canlı önizleme
-        """)
+        - 🔄 Otomatik veri temizleme (yeni PDF yüklenince)
+        - 🧹 Sekme kapanınca otomatik temizlik
+        """
+        )
 
 # Footer
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("---")
 st.markdown(
     "<p style='text-align: center; color: #999; font-size: 0.9rem;'>Made with ❤️ using Streamlit</p>",
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
