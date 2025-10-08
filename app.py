@@ -26,9 +26,12 @@ PAD_BOTTOM = 12
 def st_image_compat(col, img, caption=None):
     """Streamlit sürüm farkı için uyumlu görüntüleme."""
     try:
-        col.image(img, caption=caption, use_container_width=True)
+        col.image(img, caption=caption, width='stretch')
     except TypeError:
-        col.image(img, caption=caption, use_column_width=True)
+        try:
+            col.image(img, caption=caption, use_container_width=True)
+        except TypeError:
+            col.image(img, caption=caption, use_column_width=True)
 
 
 def pdf_to_images(file_bytes: bytes, dpi: int = DPI):
@@ -242,6 +245,8 @@ def _ensure_state():
         st.session_state.pptx_created = False
     if "pptx_buffer" not in st.session_state:
         st.session_state.pptx_buffer = None
+    if "show_preview" not in st.session_state:
+        st.session_state.show_preview = False
 
 
 _ensure_state()
@@ -557,20 +562,28 @@ if st.session_state.processed and st.session_state.crops_pngs:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # Önizleme bölümü
-    st.markdown("### 🖼️ Kesilen Görseller")
-    st.caption("Görsellerin üzerine gelerek büyütebilirsiniz")
+    # Önizleme bölümü - sadece show_preview True ise göster
+    if st.session_state.show_preview:
+        st.markdown("### 🖼️ Kesilen Görseller")
 
-    # Izgara görünümü - 3 sütun
-    for i in range(0, len(st.session_state.crops_pngs), 3):
-        cols = st.columns(3)
-        for j in range(3):
-            idx = i + j
-            if idx < len(st.session_state.crops_pngs):
-                data = st.session_state.crops_pngs[idx]
-                im = Image.open(io.BytesIO(data)).convert("RGB")
-                with cols[j]:
-                    st_image_compat(cols[j], im, caption=f"Slide {idx + 1:04d}")
+        col_toggle1, col_toggle2, col_toggle3 = st.columns([1, 1, 1])
+        with col_toggle2:
+            if st.button("🗑️ Önizlemeyi Temizle", use_container_width=True):
+                st.session_state.show_preview = False
+                st.rerun()
+
+        st.caption("Görsellerin üzerine gelerek büyütebilirsiniz")
+
+        # Izgara görünümü - 3 sütun
+        for i in range(0, len(st.session_state.crops_pngs), 3):
+            cols = st.columns(3)
+            for j in range(3):
+                idx = i + j
+                if idx < len(st.session_state.crops_pngs):
+                    data = st.session_state.crops_pngs[idx]
+                    im = Image.open(io.BytesIO(data)).convert("RGB")
+                    with cols[j]:
+                        st_image_compat(cols[j], im, caption=f"Slide {idx + 1:04d}")
 
 else:
     # Boş durum mesajı
