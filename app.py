@@ -1,5 +1,8 @@
 import io
 import zipfile
+import os
+import tempfile
+import pickle
 from pathlib import Path
 from itertools import count
 import time
@@ -211,46 +214,16 @@ st.set_page_config(
 )
 
 
-# Kalıcı durum - Güvenli başlatma
-def _ensure_state():
-    ss = st.session_state
-    # Tüm state'leri güvenli şekilde başlat
-    if "crops_pngs" not in ss:
-        ss.crops_pngs = []
-    if "last_count" not in ss:
-        ss.last_count = 0
-    if "processed" not in ss:
-        ss.processed = False
-    if "pptx_created" not in ss:
-        ss.pptx_created = False
-    if "pptx_buffer" not in ss:
-        ss.pptx_buffer = None
-    if "show_preview" not in ss:
-        ss.show_preview = False
-    if "last_uploaded_file_id" not in ss:
-        ss.last_uploaded_file_id = None
-    if "pages_count" not in ss:
-        ss.pages_count = 0
-    if "bands_count" not in ss:
-        ss.bands_count = 0
+# Minimal session state - sadece gerekli olanlar
+def init_minimal_state():
+    """Minimal session state başlatma"""
+    if "processing" not in st.session_state:
+        st.session_state.processing = False
+    if "current_file" not in st.session_state:
+        st.session_state.current_file = None
 
 
-_ensure_state()
-
-
-# Güvenli state temizleme fonksiyonu
-def clear_all_state():
-    """Tüm session state'leri güvenli şekilde temizler"""
-    keys_to_clear = [
-        "crops_pngs", "last_count", "processed", "pptx_created",
-        "pptx_buffer", "show_preview", "last_uploaded_file_id",
-        "pages_count", "bands_count"
-    ]
-    for key in keys_to_clear:
-        if key in st.session_state:
-            del st.session_state[key]
-    _ensure_state()  # Yeniden başlat
-
+init_minimal_state()
 
 # ---- Modern CSS Stilleri ----
 st.markdown(
@@ -297,15 +270,7 @@ with col2:
         label_visibility="collapsed"
     )
 
-    # Yeni dosya yüklendiğinde önceki verileri temizle
     if uploaded is not None:
-        current_file_id = f"{uploaded.name}_{uploaded.size}"
-
-        # Eğer farklı bir dosya yüklendiyse, önceki verileri temizle
-        if st.session_state.last_uploaded_file_id != current_file_id:
-            clear_all_state()  # Güvenli temizleme
-            st.session_state.last_uploaded_file_id = current_file_id
-
         file_size = len(uploaded.getvalue()) / (1024 * 1024)
         st.success(f"✅ **{uploaded.name}** yüklendi ({file_size:.1f} MB)")
 
@@ -313,56 +278,77 @@ with col2:
 
         # İşle butonu - tam genişlik
         if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
+            st.session_state.processing = True
+            st.session_state.current_file = uploaded.name
+
             try:
-                pdf_bytes = uploaded.getvalue()
-                pages = pdf_to_images(pdf_bytes, dpi=DPI)
+                with st.spinner("📄 PDF işleniyor..."):
+                    pdf_bytes = uploaded.getvalue()
+                    pages = pdf_to_images(pdf_bytes, dpi=DPI)
 
-                crops_pngs = []
-                total_bands = 0
+                    crops_pngs = []
+                    total_bands = 0
 
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
 
-                for idx, img in enumerate(pages):
-                    status_text.text(f"🔍 Sayfa {idx + 1}/{len(pages)} işleniyor...")
-                    bands, _ = find_header_bands(img)
-                    total_bands += len(bands)
-                    boxes = slice_by_headers(img, bands)
-                    for box in boxes:
-                        x0, y0, x1, y1 = box
-                        crop = img[y0:y1, x0:x1]
-                        pil_im = bgr_to_pil(crop)
-                        b = io.BytesIO()
-                        pil_im.save(b, format="PNG")
-                        crops_pngs.append(b.getvalue())
+                    for idx, img in enumerate(pages):
+                        status_text.text(f"🔍 Sayfa {idx + 1}/{len(pages)} işleniyor...")
+                        bands, _ = find_header_bands(img)
+                        total_bands += len(bands)
+                        boxes = slice_by_headers(img, bands)
+                        for box in boxes:
+                            x0, y0, x1, y1 = box
+                            crop = img[y0:y1, x0:x1]
+                            pil_im = bgr_to_pil(crop)
+                            b = io.BytesIO()
+                            pil_im.save(b, format="PNG")
+                            crops_pngs.append(b.getvalue())
 
-                    progress_bar.progress((idx + 1) / len(pages))
+                        progress_bar.progress((idx + 1) / len(pages))
 
-                # Duruma kaydet
-                st.session_state.crops_pngs = crops_pngs
-                st.session_state.last_count = len(crops_pngs)
-                st.session_state.processed = True
-                st.session_state.pages_count = len(pages)
-                st.session_state.bands_count = total_bands
-                st.session_state.show_preview = True
-                st.session_state.pptx_created = False
-                st.session_state.pptx_buffer = None
+                    # Geçici dosyalara kaydet (session state yerine)
+                    import tempfile
+                    import pickle
 
-                # Progress bar ve status'u temizle
-                progress_bar.empty()
-                status_text.empty()
+                    # Geçici dosya oluştur
+                    temp_dir = tempfile.mkdtemp()
+                    results_file = os.path.join(temp_dir, "results.pkl")
+
+                    results = {
+                        'crops_pngs': crops_pngs,
+                        'pages_count': len(pages),
+                        'bands_count': total_bands,
+                        'last_count': len(crops_pngs)
+                    }
+
+                    with open(results_file, 'wb') as f:
+                        pickle.dump(results, f)
+
+                    st.session_state.results_file = results_file
+                    st.session_state.processing = False
 
                 st.success(f"✅ İşlem tamamlandı! {len(crops_pngs)} slide oluşturuldu.")
                 st.rerun()
 
             except Exception as e:
+                st.session_state.processing = False
                 st.error(f"❌ Hata oluştu: {str(e)}")
                 st.error("Lütfen PDF dosyanızı kontrol edin ve tekrar deneyin.")
 
 st.markdown("---")
 
 # ---- İstatistikler ve İndirme ----
-if st.session_state.processed and st.session_state.crops_pngs:
+# Sonuçları geçici dosyadan yükle
+results = None
+if hasattr(st.session_state, 'results_file') and st.session_state.results_file:
+    try:
+        with open(st.session_state.results_file, 'rb') as f:
+            results = pickle.load(f)
+    except:
+        results = None
+
+if results and results['crops_pngs']:
     st.markdown("### 📊 İşlem Sonuçları")
     col1, col2, col3, col4 = st.columns(4)
 
@@ -371,7 +357,7 @@ if st.session_state.processed and st.session_state.crops_pngs:
             f"""
             <div class="stat-card" style="border-left-color: #667eea;">
                 <div class="stat-label">📄 Sayfa</div>
-                <div class="stat-number" style="color: #667eea;">{st.session_state.pages_count}</div>
+                <div class="stat-number" style="color: #667eea;">{results['pages_count']}</div>
             </div>
             """,
             unsafe_allow_html=True
@@ -382,7 +368,7 @@ if st.session_state.processed and st.session_state.crops_pngs:
             f"""
             <div class="stat-card" style="border-left-color: #f5576c;">
                 <div class="stat-label">🎯 Başlık</div>
-                <div class="stat-number" style="color: #f5576c;">{st.session_state.bands_count}</div>
+                <div class="stat-number" style="color: #f5576c;">{results['bands_count']}</div>
             </div>
             """,
             unsafe_allow_html=True
@@ -393,7 +379,7 @@ if st.session_state.processed and st.session_state.crops_pngs:
             f"""
             <div class="stat-card" style="border-left-color: #4facfe;">
                 <div class="stat-label">✂️ Kesim</div>
-                <div class="stat-number" style="color: #4facfe;">{st.session_state.last_count}</div>
+                <div class="stat-number" style="color: #4facfe;">{results['last_count']}</div>
             </div>
             """,
             unsafe_allow_html=True
@@ -403,12 +389,12 @@ if st.session_state.processed and st.session_state.crops_pngs:
         # ZIP oluşturma - sadece indirme anında
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for i, data in enumerate(st.session_state.crops_pngs, start=1):
+            for i, data in enumerate(results['crops_pngs'], start=1):
                 zf.writestr(f"slide_{i:04d}.png", data)
         zip_buf.seek(0)
 
         st.download_button(
-            label=f"📦 ZIP İndir ({st.session_state.last_count} görsel)",
+            label=f"📦 ZIP İndir ({results['last_count']} görsel)",
             data=zip_buf,
             file_name="slides.zip",
             mime="application/zip",
@@ -421,59 +407,42 @@ if st.session_state.processed and st.session_state.crops_pngs:
     col_ppt1, col_ppt2, col_ppt3 = st.columns([1, 2, 1])
 
     with col_ppt2:
-        if not st.session_state.pptx_created:
-            if st.button("🎯 Slide'lara Aktar (PowerPoint Oluştur)", type="secondary", key="create_ppt_btn"):
-                with st.spinner("📊 PowerPoint sunumu oluşturuluyor..."):
-                    pptx_buffer = create_powerpoint(st.session_state.crops_pngs)
-                    st.session_state.pptx_buffer = pptx_buffer
-                    st.session_state.pptx_created = True
-                st.rerun()
-        else:
-            st.success(f"✅ PowerPoint hazır! {st.session_state.last_count} slide içeriyor.")
-
-            st.download_button(
-                label="📥 PowerPoint'i İndir (.pptx)",
-                data=st.session_state.pptx_buffer,
-                file_name="sunum.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                type="primary",
-                key="download_ppt_btn"
-            )
+        if st.button("🎯 Slide'lara Aktar (PowerPoint Oluştur)", type="secondary", key="create_ppt_btn"):
+            with st.spinner("📊 PowerPoint sunumu oluşturuluyor..."):
+                pptx_buffer = create_powerpoint(results['crops_pngs'])
+                st.download_button(
+                    label="📥 PowerPoint'i İndir (.pptx)",
+                    data=pptx_buffer,
+                    file_name="sunum.pptx",
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    type="primary",
+                    key="download_ppt_btn"
+                )
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("---")
 
     # Önizleme bölümü
-    if st.session_state.show_preview:
-        st.markdown("### 🖼️ Kesilen Görseller")
+    st.markdown("### 🖼️ Kesilen Görseller")
+    st.info("ℹ️ Yeni bir PDF yüklediğinizde önizleme otomatik silinir", icon="ℹ️")
+    st.caption("💡 Görsellerin üzerine gelerek büyütebilirsiniz")
 
-        # Bilgi mesajı
-        col_info1, col_info2 = st.columns([3, 1])
-        with col_info1:
-            st.info("ℹ️ Yeni bir PDF yüklediğinizde veya sekmeyi kapattığınızda önizleme otomatik silinir", icon="ℹ️")
-        with col_info2:
-            if st.button("🗑️ Önizlemeyi Temizle", key="clear_preview_btn"):
-                clear_all_state()  # Güvenli temizleme
-                st.rerun()
-
-        st.caption("💡 Görsellerin üzerine gelerek büyütebilirsiniz")
-
-        # Görselleri göster - 3 sütunlu grid
-        for i in range(0, len(st.session_state.crops_pngs), 3):
-            cols = st.columns(3)
-            for j in range(3):
-                idx = i + j
-                if idx < len(st.session_state.crops_pngs):
-                    data = st.session_state.crops_pngs[idx]
-                    try:
-                        im = Image.open(io.BytesIO(data))
-                        # RGB'ye çevir
-                        if im.mode != 'RGB':
-                            im = im.convert('RGB')
-                        # Streamlit'e göster
-                        cols[j].image(im, caption=f"Slide {idx + 1:04d}")
-                    except Exception as e:
-                        cols[j].error(f"❌ Görsel yüklenemedi: {str(e)}")
+    # Görselleri göster - 3 sütunlu grid
+    for i in range(0, len(results['crops_pngs']), 3):
+        cols = st.columns(3)
+        for j in range(3):
+            idx = i + j
+            if idx < len(results['crops_pngs']):
+                data = results['crops_pngs'][idx]
+                try:
+                    im = Image.open(io.BytesIO(data))
+                    # RGB'ye çevir
+                    if im.mode != 'RGB':
+                        im = im.convert('RGB')
+                    # Streamlit'e göster
+                    cols[j].image(im, caption=f"Slide {idx + 1:04d}")
+                except Exception as e:
+                    cols[j].error(f"❌ Görsel yüklenemedi: {str(e)}")
 
 else:
     st.info("👆 PDF dosyanızı yükleyin ve işleme başlatın", icon="ℹ️")
