@@ -429,7 +429,7 @@ with col2:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # İşle butonu - tam genişlik
-        if st.button("🚀 İşlemeyi Başlat", type="primary", use_container_width=True):
+        if st.button("🚀 İşlemeyi Başlat", type="primary", key="process_btn"):
             pdf_bytes = uploaded.getvalue()
 
             # Progress bar ile işleme
@@ -529,7 +529,7 @@ if st.session_state.processed and st.session_state.crops_pngs:
             data=zip_buf,
             file_name="slides.zip",
             mime="application/zip",
-            use_container_width=True
+            key="download_zip"
         )
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -539,7 +539,7 @@ if st.session_state.processed and st.session_state.crops_pngs:
 
     with col_ppt2:
         if not st.session_state.pptx_created:
-            if st.button("🎯 Slide'lara Aktar (PowerPoint Oluştur)", type="secondary", use_container_width=True):
+            if st.button("🎯 Slide'lara Aktar (PowerPoint Oluştur)", type="secondary", key="create_ppt"):
                 with st.spinner("📊 PowerPoint sunumu oluşturuluyor..."):
                     pptx_buffer = create_powerpoint(st.session_state.crops_pngs)
                     st.session_state.pptx_buffer = pptx_buffer
@@ -555,8 +555,8 @@ if st.session_state.processed and st.session_state.crops_pngs:
                 data=st.session_state.pptx_buffer,
                 file_name="sunum.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                use_container_width=True,
-                type="primary"
+                type="primary",
+                key="download_ppt"
             )
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -568,7 +568,7 @@ if st.session_state.processed and st.session_state.crops_pngs:
 
         col_toggle1, col_toggle2, col_toggle3 = st.columns([1, 1, 1])
         with col_toggle2:
-            if st.button("🗑️ Önizlemeyi Temizle", use_container_width=True):
+            if st.button("🗑️ Önizlemeyi Temizle", key="clear_preview"):
                 st.session_state.show_preview = False
                 st.rerun()
 
